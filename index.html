@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snake</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #111827;
+      color: #f9fafb;
+      font-family: system-ui, sans-serif;
+    }
+    h1 { margin: 0 0 8px; }
+    p { margin: 8px 0; }
+    canvas {
+      width: min(90vw, 400px);
+      background: #1f2937;
+      border: 2px solid #4b5563;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Snake</h1>
+  <p>Score: <span id="score">0</span> | Best: <span id="best">0</span></p>
+  <canvas id="game" width="400" height="400"></canvas>
+  <p id="message">Press an arrow key or swipe to start</p>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreEl = document.getElementById("score");
+    const bestEl = document.getElementById("best");
+    const messageEl = document.getElementById("message");
+
+    const GRID_SIZE = 20;
+    const CELL = canvas.width / GRID_SIZE;
+    const SPEED_MS = 120;
+
+    const DIRECTIONS = {
+      ArrowUp: { x: 0, y: -1 },
+      ArrowDown: { x: 0, y: 1 },
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 },
+    };
+
+    let snake, food, direction, nextDirection, score, timer;
+    let best = loadBest();
+
+    function loadBest() {
+      try {
+        return Number(localStorage.getItem("snake-best")) || 0;
+      } catch {
+        return 0;
+      }
+    }
+
+    function saveBest() {
+      try {
+        localStorage.setItem("snake-best", best);
+      } catch {
+        // The game still works if the browser blocks storage.
+      }
+    }
+
+    function reset() {
+      snake = [{ x: 10, y: 10 }];
+      direction = { x: 0, y: 0 };
+      nextDirection = direction;
+      score = 0;
+      timer = null;
+      placeFood();
+      updateScore();
+      draw();
+    }
+
+    function placeFood() {
+      const freeCells = [];
+      for (let x = 0; x < GRID_SIZE; x++) {
+        for (let y = 0; y < GRID_SIZE; y++) {
+          if (!snake.some((part) => part.x === x && part.y === y)) {
+            freeCells.push({ x, y });
+          }
+        }
+      }
+      food = freeCells[Math.floor(Math.random() * freeCells.length)];
+    }
+
+    function updateScore() {
+      best = Math.max(best, score);
+      scoreEl.textContent = score;
+      bestEl.textContent = best;
+    }
+
+    function step() {
+      direction = nextDirection;
+      const head = {
+        x: snake[0].x + direction.x,
+        y: snake[0].y + direction.y,
+      };
+
+      const ate = head.x === food.x && head.y === food.y;
+      if (!ate) snake.pop();
+
+      const hitWall =
+        head.x < 0 || head.y < 0 || head.x >= GRID_SIZE || head.y >= GRID_SIZE;
+      const hitSelf = snake.some((part) => part.x === head.x && part.y === head.y);
+
+      if (hitWall || hitSelf) {
+        endGame("Game over! Press an arrow key or swipe to play again");
+        return;
+      }
+
+      snake.unshift(head);
+
+      if (ate) {
+        score++;
+        updateScore();
+        if (snake.length === GRID_SIZE * GRID_SIZE) {
+          draw();
+          endGame("You win! Press an arrow key or swipe to play again");
+          return;
+        }
+        placeFood();
+      }
+
+      draw();
+    }
+
+    function endGame(message) {
+      clearInterval(timer);
+      timer = null;
+      saveBest();
+      messageEl.textContent = message;
+      snake = null;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#ef4444";
+      ctx.fillRect(food.x * CELL + 2, food.y * CELL + 2, CELL - 4, CELL - 4);
+
+      snake.forEach((part, index) => {
+        ctx.fillStyle = index === 0 ? "#86efac" : "#22c55e";
+        ctx.fillRect(part.x * CELL + 1, part.y * CELL + 1, CELL - 2, CELL - 2);
+      });
+    }
+
+    function turn(newDirection) {
+      if (!snake) reset();
+
+      const reversing =
+        snake.length > 1 &&
+        newDirection.x === -direction.x &&
+        newDirection.y === -direction.y;
+      if (reversing) return;
+
+      nextDirection = newDirection;
+
+      if (!timer) {
+        messageEl.textContent = "Eat the red squares and avoid the walls";
+        timer = setInterval(step, SPEED_MS);
+      }
+    }
+
+    document.addEventListener("keydown", (event) => {
+      const newDirection = DIRECTIONS[event.key];
+      if (!newDirection) return;
+      event.preventDefault();
+      turn(newDirection);
+    });
+
+    let touchStart = null;
+
+    canvas.addEventListener("touchstart", (event) => {
+      touchStart = event.changedTouches[0];
+    });
+
+    canvas.addEventListener("touchend", (event) => {
+      if (!touchStart) return;
+      const touchEnd = event.changedTouches[0];
+      const dx = touchEnd.clientX - touchStart.clientX;
+      const dy = touchEnd.clientY - touchStart.clientY;
+      touchStart = null;
+
+      if (Math.abs(dx) < 20 && Math.abs(dy) < 20) return;
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        turn(dx > 0 ? DIRECTIONS.ArrowRight : DIRECTIONS.ArrowLeft);
+      } else {
+        turn(dy > 0 ? DIRECTIONS.ArrowDown : DIRECTIONS.ArrowUp);
+      }
+    });
+
+    reset();
+  </script>
+</body>
+</html>
